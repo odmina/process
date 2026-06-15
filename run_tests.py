@@ -1,4 +1,4 @@
-from process.white_gaussian_noise import WhiteGaussianNoise
+from white_gaussian_noise import WhiteGaussianNoise
 import numpy as np
 from pytest import MonkeyPatch
 import builtins
@@ -29,7 +29,6 @@ def check_sigma(sigma=1):
         log(red("FAIL"), ex_name)
 
 # %%
-monkeypatch = MonkeyPatch()
 def check_sim_params_setter(monkeypatch):
     ex_name= "Simulation parameters"
     monkeypatch.setattr(builtins, "input", lambda _: "y")
@@ -37,14 +36,20 @@ def check_sim_params_setter(monkeypatch):
     rng = np.random.default_rng()
     deltas = [1, 0.1, 0.01]
     times = [10, 100]
+    passes = []
     for delta in deltas:
         for time in times:
-            params_process.set_sim_parameters(delta_t=delta, total_time=time)
-            data = params_process.sim_data(rng=rng)
+            data = params_process.sim_data(rng=rng, delta_t=delta, total_time=time)
             if data.shape == (1, int(time/delta)):
-                log(green("PASS"), ex_name, "for", "delta_t", delta, "total_time", time)
+                passes.append(1)
             else:
-                log(red("FAIL"), ex_name, "for", "delta_t", delta, "total_time", time)
+                passes.append(0)
+    neg_passes = np.sum(np.logical_not(passes))
+    if neg_passes == 0:
+        log(green("PASS"), ex_name)
+    else:
+        log(red("FAIL"), ex_name)
+
 
 # %%
 def check_simulated_data_distribution():
@@ -59,8 +64,7 @@ def check_simulated_data_distribution():
     n_runs=1000
     for run in range(n_runs):
         for process in processes:
-            process.set_sim_parameters(delta_t=delta_t, total_time=total_time)
-            sim_data = process.sim_data(n=n, mu=mu, rng=rng)
+            sim_data = process.sim_data(n=n, mu=mu, rng=rng, delta_t=delta_t, total_time=total_time)
             scale = process.get_sigma()
             for i in range(n[0]):
                 for j in range(n[1]):
@@ -71,9 +75,14 @@ def check_simulated_data_distribution():
     p_values = np.array(p_values)
     n_sig = np.sum(p_values < 0.05)
     max_different = len(processes)*mu.size*n_runs*0.05
-    if n_sig > len(processes)*mu.size*n_runs*0.05:
+    if n_sig > len(processes)*mu.size*n_runs*0.07: # 0.07 is intentional - condition would be true for inf tests,
+        # it's a lot, but not infinity
         log(yellow("CAUTION"), ex_name, "expected different", max_different, "actual different", n_sig)
     else:
         log(green("PASS"), ex_name, "expected different", max_different, "actual different", n_sig)
 
-
+# %%
+if __name__ == "__main__":
+    monkeypatch = MonkeyPatch()
+    check_sim_params_setter(monkeypatch)
+    check_simulated_data_distribution()
